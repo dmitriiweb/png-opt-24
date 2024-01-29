@@ -1,8 +1,14 @@
 // This script will optimize png files in given directory and all subdirs, if a file was created
 // less then 24 hours
 
-use std::env;
+use std::{
+    env, fs,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
+use clap::Parser;
+
+use glob::glob;
 use log::LevelFilter;
 use log4rs::{
     append::{console::ConsoleAppender, file::FileAppender},
@@ -10,6 +16,13 @@ use log4rs::{
     encode::pattern::PatternEncoder,
     Config,
 };
+
+#[derive(Parser, Debug)]
+struct CliArgs {
+    // path to a target directory
+    #[arg(short, long)]
+    target_dir: String,
+}
 
 fn init_logs() {
     let stdout = ConsoleAppender::builder().build();
@@ -40,6 +53,33 @@ fn init_logs() {
     log4rs::init_config(config).unwrap();
 }
 
+fn optimize_images(target_dir: &str) {
+    let dt_now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let pattern = format!("{}/**/*.png", target_dir);
+    for entry in glob(&pattern).unwrap() {
+        let item = match entry {
+            Ok(item) => item,
+            Err(err) => {
+                log::error!("{}", err);
+                continue;
+            }
+        };
+        let item_created = match fs::metadata(&item).unwrap().created() {
+            Ok(item_created) => item_created.duration_since(UNIX_EPOCH).unwrap().as_secs(),
+            Err(_) => continue,
+        };
+        let time_diff = (dt_now - item_created) / 60 / 60;
+        if time_diff > 24 {
+            continue;
+        }
+    }
+}
+
 fn main() {
     init_logs();
+    let cli_args = CliArgs::parse();
+    optimize_images(&cli_args.target_dir);
 }
