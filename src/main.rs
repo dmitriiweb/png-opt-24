@@ -3,13 +3,14 @@
 
 use std::{
     env, fs,
+    path::Path,
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use clap::Parser;
 
 use glob::glob;
-use log::LevelFilter;
+use log::{info, LevelFilter};
 use log4rs::{
     append::{console::ConsoleAppender, file::FileAppender},
     config::{Appender, Logger, Root},
@@ -59,6 +60,7 @@ fn optimize_images(target_dir: &str) {
         .unwrap()
         .as_secs();
     let pattern = format!("{}/**/*.png", target_dir);
+    let mut image_counter = 0;
     for entry in glob(&pattern).unwrap() {
         let item = match entry {
             Ok(item) => item,
@@ -75,7 +77,19 @@ fn optimize_images(target_dir: &str) {
         if time_diff > 24 {
             continue;
         }
+        image_counter += 1;
+
+        let opt_options = oxipng::Options::default();
+
+        let infile = oxipng::InFile::from(&item);
+        let outfile = oxipng::OutFile::from_path(item.clone());
+
+        match oxipng::optimize(&infile, &outfile, &opt_options) {
+            Ok(_) => log::info!("optimized: {:?}", &item),
+            Err(err) => log::error!("Can't optimize {:?}: {}", &item, err),
+        }
     }
+    log::info!("Optimized {} images", image_counter);
 }
 
 fn main() {
